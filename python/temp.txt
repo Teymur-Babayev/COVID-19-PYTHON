@@ -1,0 +1,92 @@
+import tkinter as tk
+from tkinter import simpledialog
+from tkinter import Toplevel
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+
+def display_graph_analytics_modal():
+    def get_country_names():
+        root = tk.Tk()
+        root.withdraw()  # Hide the root window
+
+        country_of_interest = simpledialog.askstring("Country of Interest", "Enter the name of the country in question:")
+        neighboring_countries = []
+        for i in range(3):
+            neighbor = simpledialog.askstring(f"Neighboring Country {i+1}", f"Enter the name of neighboring country {i+1}:")
+            neighboring_countries.append(neighbor)
+
+        return country_of_interest, neighboring_countries
+
+    # Load the DataFrame
+    df = pd.read_csv('./documents/time_series_covid19_confirmed_global(1).csv')
+
+    # Get country names from user input
+    country_of_interest, neighboring_countries = get_country_names()
+
+    # Store the selected country names
+    selected_countries = [country_of_interest] + neighboring_countries
+
+    # Filter the dataset to include only the data for the selected countries
+    selected_country_data = df[df['Country/Region'].isin(selected_countries)]
+
+    # Create a dictionary to store the current number of infected people for each selected country
+    current_infected = {}
+    for country in selected_countries:
+        country_data = selected_country_data[selected_country_data['Country/Region'] == country]
+        if not country_data.empty:
+            current_infected[country] = country_data.iloc[:, -1].values[0]
+        else:
+            current_infected[country] = "Data not available"
+
+    # Create a graph to represent the relationship between the selected countries
+    G = nx.Graph()
+
+    # Add nodes for the selected countries
+    for country, infected_count in current_infected.items():
+        G.add_node(country, type='country', current_infected=infected_count)
+
+    # Add edges between the selected countries
+    for neighbor in neighboring_countries:
+        G.add_edge(country_of_interest, neighbor)
+
+    # Visualize the graph
+    fig = plt.figure(figsize=(10, 6))
+    pos = nx.spring_layout(G)
+    nx.draw_networkx_nodes(G, pos, node_size=700, node_color='skyblue')
+    nx.draw_networkx_labels(G, pos, font_size=12, font_family='sans-serif')
+    nx.draw_networkx_edges(G, pos, width=1.0, alpha=0.5, edge_color='gray')
+
+    # Add labels for the number of infected people for each selected country
+    node_labels = nx.get_node_attributes(G, 'current_infected')
+    for node, label in node_labels.items():
+        plt.text(pos[node][0], pos[node][1] + 0.05, f"{node}\n(Current Infected: {label})", horizontalalignment='center', fontsize=10, color='red')
+
+    plt.title('Relationship between Selected Countries')
+    plt.axis('off')
+
+    # Create a modal window to display the graph
+    modal_window = Toplevel()
+    modal_window.title("Graph Analytics")
+    modal_window.geometry("800x600")
+
+    # Embed the matplotlib figure in the modal window
+    canvas = FigureCanvasTkAgg(fig, master=modal_window)
+    canvas.draw()
+    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    # Add a toolbar for navigation
+    toolbar = NavigationToolbar2Tk(canvas, modal_window)
+    toolbar.update()
+    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    # Function to close the modal window
+    def close_modal():
+        modal_window.destroy()
+
+    # Add a close button
+    close_button = tk.Button(modal_window, text="Close", command=close_modal)
+    close_button.pack()
+
+    modal_window.mainloop()
